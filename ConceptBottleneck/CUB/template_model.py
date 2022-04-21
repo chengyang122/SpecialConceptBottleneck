@@ -100,7 +100,7 @@ def inception_v3(pretrained, freeze, **kwargs):
 
 class Inception3(nn.Module):
 
-    def __init__(self, num_classes, aux_logits=True, transform_input=False, n_attributes=0, bottleneck=False, expand_dim=0, three_class=False, connect_CY=False):
+    def __init__(self, num_classes, aux_logits=True, transform_input=False, n_attributes=0, bottleneck=False, expand_dim=0, three_class=False, connect_CY=False, conceptFilter = True):
         """
         Args:
         num_classes: number of main task classes
@@ -116,6 +116,7 @@ class Inception3(nn.Module):
         self.transform_input = transform_input
         self.n_attributes = n_attributes
         self.bottleneck = bottleneck
+        self.conceptFilter = conceptFilter
         self.Conv2d_1a_3x3 = BasicConv2d(3, 32, kernel_size=3, stride=2)
         self.Conv2d_2a_3x3 = BasicConv2d(32, 32, kernel_size=3)
         self.Conv2d_2b_3x3 = BasicConv2d(32, 64, kernel_size=3, padding=1)
@@ -135,6 +136,9 @@ class Inception3(nn.Module):
         self.Mixed_7a = InceptionD(768)
         self.Mixed_7b = InceptionE(1280)
         self.Mixed_7c = InceptionE(2048)
+
+        #used to filter the concepts out
+        self.ConceptFilter =  torch.nn.ModuleList([InceptionE(2048) for i in range(n_attributes)])
 
         self.all_fc = nn.ModuleList() #separate fc layer for each prediction task. If main task is involved, it's always the first fc in the list
 
@@ -211,6 +215,15 @@ class Inception3(nn.Module):
         x = self.Mixed_7c(x)
         # N x 2048 x 8 x 8
         # Adaptive average pooling
+        if self.conceptFilter:
+            filterOut = self._concept_filters(x)
+            # [N x 2048 x 8 x 8] list of size of the attributes
+            filterOut = [F.adaptive_avg_pool2d(x, (1, 1)) for x in filterOut]
+            filterOut = [F.dropout(x, training=self.training) for x in filterOut]
+            filterOut = [x.view(x.size(0), -1) for x in filterOut]
+            filterOut = [fc(x) for fc,x in zip(self.all_fc, filterOut)]
+            return filterOut
+
         x = F.adaptive_avg_pool2d(x, (1, 1))
         # N x 2048 x 1 x 1
         x = F.dropout(x, training=self.training)
@@ -228,6 +241,9 @@ class Inception3(nn.Module):
         else:
             return out
 
+    def _concept_filters(self, x):
+        return [self.ConceptFilter[i](x) for i in range(self.n_attributes)]
+
     def load_partial_state_dict(self, state_dict):
         """
         If dimensions of the current model doesn't match the pretrained one (esp for fc layer), load whichever weights that match
@@ -239,7 +255,6 @@ class Inception3(nn.Module):
             if isinstance(param, Parameter):
                 param = param.data
             own_state[name].copy_(param)
-
 
 class FC(nn.Module):
 
