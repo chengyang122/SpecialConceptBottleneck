@@ -48,19 +48,20 @@ class CUBDataset(Dataset):
     def __getitem__(self, idx):
         img_data = self.data[idx]
         img_path = img_data['img_path']
-        # Trim unnecessary paths
+        # Trim unnecessary paths Also where to change for a windows address, what's in the img path now is the image path on my local file
         try:
             idx = img_path.split('/').index('CUB_200_2011')
             if self.image_dir != 'images':
-                img_path = '/'.join([self.image_dir] + img_path.split('/')[idx+1:])
-                img_path = img_path.replace('images/', '')
+                img_path = '\"'.join([self.image_dir] + img_path.split('\"')[idx+1:])
+                img_path = img_path.replace('images\"', '')
+                print(img_path)
             else:
                 img_path = '/'.join(img_path.split('/')[idx:])
             img = Image.open(img_path).convert('RGB')
         except:
             img_path_split = img_path.split('/')
-            split = 'train' if self.is_train else 'test'
-            img_path = '/'.join(img_path_split[:2] + [split] + img_path_split[2:])
+            #split = 'train' if self.is_train else 'test'
+            img_path = os.path.join("D:\pycharmPool\Data", *img_path_split[:2], *img_path_split[2:])
             img = Image.open(img_path).convert('RGB')
 
         class_label = img_data['class_label']
@@ -127,7 +128,7 @@ class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
     def __len__(self):
         return self.num_samples
 
-def load_data(pkl_paths, use_attr, no_img, batch_size, uncertain_label=False, n_class_attr=2, image_dir='images', resampling=False, resol=299):
+def load_data(pkl_paths, use_attr, no_img, batch_size, uncertain_label=False, n_class_attr=2, image_dir='D:\pycharmPool\CUB_200_2011\images', resampling=False, resol=299):
     """
     Note: Inception needs (299,299,3) images with inputs scaled between -1 and 1
     Loads data with transformations applied, and upsample the minority class if there is class imbalance and weighted loss is not used
